@@ -1,0 +1,33 @@
+# nim-cpu-bridge: docker/Dockerfile.shim
+#
+# Builds libcuda_shim.so from cuda_shim.c using gcc and outputs the
+# compiled .so plus all required symlinks to /output (a Docker volume).
+#
+# Used by compose.yml's shim-builder service.
+# Can also be built standalone:
+#   docker build -f docker/Dockerfile.shim -t nim-cpu-bridge-shim .
+#   docker run --rm -v $(pwd)/lib:/output nim-cpu-bridge-shim
+
+FROM gcc:13-bookworm
+
+LABEL org.opencontainers.image.title="nim-cpu-bridge shim builder"
+LABEL org.opencontainers.image.source="https://github.com/your-org/nim-cpu-bridge"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# Copy only the shim source — keep the layer small
+COPY src/shim/ /build/
+
+WORKDIR /build
+
+# Build the shared library and all CUDA/NVML/NCCL symlinks
+RUN make clean && make
+
+# Default: copy outputs to /output (caller mounts this volume)
+CMD ["sh", "-c", \
+     "cp libcuda_shim.so /output/ && \
+      cp libcuda.so.1 libcuda.so /output/ && \
+      cp libcudart.so.12 libcudart.so /output/ && \
+      cp libnvidia-ml.so.1 libnvidia-ml.so /output/ && \
+      cp libcublas.so.12 libcublasLt.so.12 /output/ && \
+      cp libnccl.so.2 /output/ && \
+      echo 'Shim built successfully.' && ls -lh /output/"]

@@ -1,0 +1,59 @@
+# ── Compiled shim artifacts ───────────────────────────────────────────────────
+# Built at runtime by Docker (shim-builder service). Never commit binaries.
+src/shim/*.so
+src/shim/*.so.*
+src/shim/libcuda.so*
+src/shim/libcudart.so*
+src/shim/libnvidia-ml.so*
+src/shim/libcublas.so*
+src/shim/libcublasLt.so*
+src/shim/libnccl.so*
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+dist/
+build/
+.venv/
+venv/
+env/
+.env
+
+# ── Model weights & converted files (large binary; never commit) ──────────────
+*.gguf
+*.safetensors
+*.onnx
+*.bin
+*.pt
+*.pth
+
+# ── NIM / HuggingFace cache ───────────────────────────────────────────────────
+.cache/
+nim_cache/
+~/.cache/nim/
+
+# ── pytest / coverage ─────────────────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Docker build artefacts ────────────────────────────────────────────────────
+*.tar.gz
+*.tar
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
