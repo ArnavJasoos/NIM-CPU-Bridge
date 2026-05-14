@@ -44,7 +44,7 @@ services:
       NCB_FAKE_GPU_NAME:    ${NCB_FAKE_GPU_NAME:-Tesla T4}
       NCB_FAKE_VRAM_MB:     ${NCB_FAKE_VRAM_MB:-16384}
       NCB_LOG_LEVEL:        ${NCB_LOG_LEVEL:-INFO}
-      NCB_BRIDGE_SOCKET:    /tmp/ncb_bridge.sock
+      NCB_BRIDGE_SOCKET:    /opt/nim_cpu_bridge/lib/ncb_bridge.sock
       NIM_MODEL_NAME:       ${NIM_MODEL_NAME:-}
       NIM_CACHE_PATH:       /opt/nim/.cache
       NGC_API_KEY:          ${NGC_API_KEY}
@@ -82,7 +82,7 @@ services:
       NCB_FAKE_GPU_NAME:     ${NCB_FAKE_GPU_NAME:-Tesla T4}
       NCB_FAKE_VRAM_MB:      ${NCB_FAKE_VRAM_MB:-16384}
       NCB_LOG_LEVEL:         ${NCB_LOG_LEVEL:-INFO}
-      NCB_BRIDGE_SOCKET:     /tmp/ncb_bridge.sock
+      NCB_BRIDGE_SOCKET:     /opt/nim_cpu_bridge/lib/ncb_bridge.sock
       NCB_BACKEND:           ${NCB_BACKEND:-auto}
       # ── Disable CUDA checks inside NIM ───────────────────────────────────
       CUDA_VISIBLE_DEVICES:  ""

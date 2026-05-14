@@ -50,7 +50,7 @@ typedef void*           CUstream;
 #define CUDA_SUCCESS            0
 #define CUDA_ERROR_NOT_SUPPORTED 801
 #define cudaSuccess             0
-#define CUDA_VERSION            12100   /* claim CUDA 12.10 */
+#define CUDA_VERSION            13020   /* claim CUDA 12.10 */
 
 /* ── Environment-driven fake device properties ────────────────────────────── */
 
@@ -363,8 +363,6 @@ typedef struct {
     int    canMapHostMemory;
     int    computeMode;
     int    maxTexture1D;
-    /* … 80+ more fields; we zero the rest */
-    char   _pad[3072];
 } NcbDeviceProp;
 
 cudaError_t cudaGetDeviceProperties(NcbDeviceProp* prop, int device) {
