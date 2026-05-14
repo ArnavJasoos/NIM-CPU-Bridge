@@ -1,0 +1,29 @@
+# nim-cpu-bridge sidecar requirements
+# Pin ranges rather than exact versions for build resilience.
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi>=0.111,<1.0
+uvicorn[standard]>=0.29,<1.0
+pydantic>=2.7,<3.0
+
+# ── CPU inference backends (install the ones you need) ────────────────────────
+# llama-cpp-python is the primary backend; built with OpenBLAS for CPU BLAS.
+# For AVX-512, rebuild from source with CMAKE_ARGS="-DLLAMA_AVX512=on"
+llama-cpp-python>=0.2.75,<1.0
+
+# ONNX Runtime (optional; better for Phi-3 / encoder models)
+# onnxruntime>=1.18,<2.0
+
+# ctransformers (optional; Apple Metal + OpenBLAS fallback)
+# ctransformers>=0.2.27,<1.0
+
+# HuggingFace for tokenizer + weight download
+transformers>=4.41,<5.0
+huggingface-hub>=0.23,<1.0
+
+# ONNX export (optional; needed for NCB_BACKEND=onnxruntime)
+# optimum[onnxruntime]>=1.20,<2.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+requests>=2.32,<3.0
+tqdm>=4.66,<5.0

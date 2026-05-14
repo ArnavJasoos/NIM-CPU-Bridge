@@ -1,0 +1,38 @@
+# nim-cpu-bridge: docker/Dockerfile.sidecar
+#
+# Builds the Python sidecar that runs the CPU inference backends
+# and the orchestrator FastAPI service.
+
+FROM python:3.11-slim-bookworm
+
+LABEL org.opencontainers.image.title="nim-cpu-bridge sidecar"
+LABEL org.opencontainers.image.source="https://github.com/your-org/nim-cpu-bridge"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# ── System dependencies ───────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libopenblas-dev \
+        libgomp1 \
+        curl \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Create a non-root user ────────────────────────────────────────────────────
+RUN useradd -m -u 1000 ncb
+WORKDIR /app
+RUN chown ncb:ncb /app
+
+# ── Python deps ───────────────────────────────────────────────────────────────
+COPY --chown=ncb:ncb requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ── Application code ──────────────────────────────────────────────────────────
+COPY --chown=ncb:ncb src/ ./src/
+
+USER ncb
+
+EXPOSE 8000
+
+# ── Entrypoint ────────────────────────────────────────────────────────────────
+CMD ["python", "-m", "src.orchestrator.main"]

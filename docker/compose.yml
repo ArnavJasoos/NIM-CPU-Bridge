@@ -1,0 +1,105 @@
+# nim-cpu-bridge: docker/compose.yml
+#
+# Usage:
+#   export NGC_API_KEY=<your key>
+#   export NIM_IMAGE=nvcr.io/nim/meta/llama-3.1-8b-instruct:latest
+#   docker compose -f docker/compose.yml up
+#
+# The shim builder runs once, compiles libcuda_shim.so, then exits.
+# The sidecar boots the CPU inference service on port 8000.
+# The nim container runs with the shim injected — no GPU needed.
+
+services:
+
+  # ── Step 1: Build the CUDA shim .so ──────────────────────────────────────
+  shim-builder:
+    image: gcc:13-bookworm
+    volumes:
+      - ../src/shim:/build
+      - shim_lib:/output
+    working_dir: /build
+    command: >
+      sh -c "make clean && make && cp libcuda_shim.so /output/ &&
+             cp libcuda.so.1 /output/ && cp libcudart.so.12 /output/ &&
+             cp libnvidia-ml.so.1 /output/ && cp libcublas.so.12 /output/ &&
+             cp libnccl.so.2 /output/ &&
+             echo 'Shim built successfully.'"
+    restart: "no"
+
+  # ── Step 2: CPU inference sidecar ────────────────────────────────────────
+  sidecar:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.sidecar
+    volumes:
+      - nim_cache:/opt/nim/.cache
+      - shim_lib:/opt/nim_cpu_bridge/lib
+    environment:
+      NCB_BACKEND:          ${NCB_BACKEND:-auto}
+      NCB_THREADS:          ${NCB_THREADS:-0}           # 0 = auto (nproc)
+      NCB_CONTEXT_LEN:      ${NCB_CONTEXT_LEN:-4096}
+      NCB_QUANT:            ${NCB_QUANT:-Q4_K_M}
+      NCB_CONVERT_ON_START: ${NCB_CONVERT_ON_START:-true}
+      NCB_FAKE_GPU_NAME:    ${NCB_FAKE_GPU_NAME:-Tesla T4}
+      NCB_FAKE_VRAM_MB:     ${NCB_FAKE_VRAM_MB:-16384}
+      NCB_LOG_LEVEL:        ${NCB_LOG_LEVEL:-INFO}
+      NCB_BRIDGE_SOCKET:    /tmp/ncb_bridge.sock
+      NIM_MODEL_NAME:       ${NIM_MODEL_NAME:-}
+      NIM_CACHE_PATH:       /opt/nim/.cache
+      NGC_API_KEY:          ${NGC_API_KEY}
+    ports:
+      - "${NCB_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 120s    # model loading can take a while on CPU
+    depends_on:
+      shim-builder:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ── Step 3: NIM container (unmodified) ───────────────────────────────────
+  # The shim is injected via LD_PRELOAD. NIM's own network port is shadowed
+  # by the sidecar above; NIM's internal process talks to the bridge socket.
+  nim:
+    image: ${NIM_IMAGE:-nvcr.io/nim/meta/llama-3.1-8b-instruct:latest}
+    volumes:
+      - nim_cache:/opt/nim/.cache
+      - shim_lib:/opt/nim_cpu_bridge/lib
+    environment:
+      NGC_API_KEY:           ${NGC_API_KEY}
+      NIM_CACHE_PATH:        /opt/nim/.cache
+      # ── Shim injection ───────────────────────────────────────────────────
+      LD_PRELOAD:            /opt/nim_cpu_bridge/lib/libcuda_shim.so
+      LD_LIBRARY_PATH:       /opt/nim_cpu_bridge/lib:/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}
+      # ── Shim config ──────────────────────────────────────────────────────
+      NCB_FAKE_GPU_NAME:     ${NCB_FAKE_GPU_NAME:-Tesla T4}
+      NCB_FAKE_VRAM_MB:      ${NCB_FAKE_VRAM_MB:-16384}
+      NCB_LOG_LEVEL:         ${NCB_LOG_LEVEL:-INFO}
+      NCB_BRIDGE_SOCKET:     /tmp/ncb_bridge.sock
+      NCB_BACKEND:           ${NCB_BACKEND:-auto}
+      # ── Disable CUDA checks inside NIM ───────────────────────────────────
+      CUDA_VISIBLE_DEVICES:  ""
+      NVIDIA_VISIBLE_DEVICES: ""
+      # ── Route NIM's HTTP to a different internal port (8001) ─────────────
+      # The sidecar owns 8000. NIM is told to bind 8001, and the sidecar
+      # proxies non-inference paths (model downloads, health) to it.
+      UVICORN_PORT:          "8001"
+      VLLM_PORT:             "8001"
+    network_mode: "service:sidecar"   # share network namespace — bridge socket works
+    depends_on:
+      sidecar:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  shim_lib:
+    driver: local
+  nim_cache:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${NIM_CACHE_HOST_PATH:-${HOME}/.cache/nim}
+      o: bind
