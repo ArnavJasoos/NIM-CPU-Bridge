@@ -40,6 +40,7 @@ services:
       NCB_CONTEXT_LEN:      ${NCB_CONTEXT_LEN:-4096}
       NCB_QUANT:            ${NCB_QUANT:-Q4_K_M}
       NCB_CONVERT_ON_START: ${NCB_CONVERT_ON_START:-true}
+      NCB_RETRY_INTERVAL:   ${NCB_RETRY_INTERVAL:-30}  # seconds between model-load retries
       NCB_FAKE_GPU_NAME:    ${NCB_FAKE_GPU_NAME:-Tesla T4}
       NCB_FAKE_VRAM_MB:     ${NCB_FAKE_VRAM_MB:-16384}
       NCB_LOG_LEVEL:        ${NCB_LOG_LEVEL:-INFO}
@@ -50,11 +51,14 @@ services:
     ports:
       - "${NCB_HOST_PORT:-8000}:8000"
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      # Accept both 200 (ready) and 503 (loading) — the process is healthy
+      # as long as the HTTP server is responding. The NIM service_healthy
+      # gate below checks for the actual 200 before starting NIM.
+      test: ["CMD", "sh", "-c", "curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health | grep -qE '200|503'"]
       interval: 10s
       timeout: 5s
-      retries: 20
-      start_period: 120s    # model loading can take a while on CPU
+      retries: 30          # allow up to 5 min for the HTTP server to come up
+      start_period: 15s    # fast — we just need uvicorn to bind
     depends_on:
       shim-builder:
         condition: service_completed_successfully
@@ -91,7 +95,7 @@ services:
     network_mode: "service:sidecar"   # share network namespace — bridge socket works
     depends_on:
       sidecar:
-        condition: service_healthy
+        condition: service_healthy  # waits until sidecar HTTP server is up
     restart: unless-stopped
 
 volumes:

@@ -54,27 +54,70 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     backend   = os.getenv("NCB_BACKEND",  "auto")
 
     convert_on_start = os.getenv("NCB_CONVERT_ON_START", "true").lower() == "true"
+    retry_interval   = int(os.getenv("NCB_RETRY_INTERVAL", "30"))
 
     logger.info("nim-cpu-bridge orchestrator starting for model: %s", model_tag)
 
-    if convert_on_start and model_tag != "unknown":
-        try:
-            model_path = prepare_model(model_tag, quant_type=quant, backend=backend)
-            os.environ["NCB_MODEL_PATH"] = str(model_path)
-            logger.info("Model path set to %s", model_path)
-        except ConversionError as e:
-            logger.warning("Weight conversion skipped: %s", e)
-            logger.warning("Set NCB_MODEL_PATH manually if using a pre-converted GGUF.")
+    async def _model_load_loop() -> None:
+        """
+        Background task: repeatedly attempt weight conversion + router
+        startup until successful. This allows the sidecar to start and
+        pass health checks (returning status=loading) while NIM is still
+        downloading weights to the shared volume.
+        """
+        global _router
+        attempt = 0
+        loop = asyncio.get_event_loop()
 
+        while True:
+            attempt += 1
+            logger.info("[model-loader] Attempt %d …", attempt)
+            try:
+                # Step 1: convert weights (no-op if already cached)
+                if convert_on_start and model_tag != "unknown":
+                    model_path = await loop.run_in_executor(
+                        None,
+                        lambda: prepare_model(
+                            model_tag, quant_type=quant, backend=backend
+                        ),
+                    )
+                    os.environ["NCB_MODEL_PATH"] = str(model_path)
+                    logger.info("[model-loader] Model path set to %s", model_path)
+
+                # Step 2: verify path is available
+                model_path_str = os.getenv("NCB_MODEL_PATH", "")
+                if not model_path_str:
+                    raise ValueError(
+                        "NCB_MODEL_PATH not set — weights not available yet. "
+                        f"Retrying in {retry_interval}s …"
+                    )
+
+                # Step 3: build the router (loads model into RAM)
+                _router = await loop.run_in_executor(None, build_router)
+                logger.info("[model-loader] CPU backend router ready ✓")
+                return  # success — stop retrying
+
+            except asyncio.CancelledError:
+                logger.info("[model-loader] Cancelled.")
+                return
+            except Exception as exc:
+                logger.warning(
+                    "[model-loader] Model not ready: %s — retrying in %ds",
+                    exc, retry_interval,
+                )
+                await asyncio.sleep(retry_interval)
+
+    # Start the app immediately so health checks pass (status=loading).
+    # Model loading happens in the background.
+    load_task = asyncio.create_task(_model_load_loop())
+
+    yield  # Application runs — health returns "loading" until _router is set
+
+    load_task.cancel()
     try:
-        _router = build_router()
-        logger.info("CPU backend router ready")
-    except Exception as e:
-        logger.error("Failed to start backend router: %s", e)
-        raise
-
-    yield  # Application runs
-
+        await load_task
+    except asyncio.CancelledError:
+        pass
     logger.info("Shutting down nim-cpu-bridge")
 
 
