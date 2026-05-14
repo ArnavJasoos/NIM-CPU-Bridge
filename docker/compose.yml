@@ -92,6 +92,8 @@ services:
       # proxies non-inference paths (model downloads, health) to it.
       UVICORN_PORT:          "8001"
       VLLM_PORT:             "8001"
+      NIM_SERVER_PORT:       "8001"
+      NIM_HEALTH_PORT:       "8001"
     network_mode: "service:sidecar"   # share network namespace — bridge socket works
     depends_on:
       sidecar:

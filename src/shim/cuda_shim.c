@@ -50,7 +50,7 @@ typedef void*           CUstream;
 #define CUDA_SUCCESS            0
 #define CUDA_ERROR_NOT_SUPPORTED 801
 #define cudaSuccess             0
-#define CUDA_VERSION            12040   /* claim CUDA 12.4 */
+#define CUDA_VERSION            12100   /* claim CUDA 12.10 */
 
 /* ── Environment-driven fake device properties ────────────────────────────── */
 
