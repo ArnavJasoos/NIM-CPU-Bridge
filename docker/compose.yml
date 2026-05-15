@@ -3,6 +3,7 @@
 # Usage:
 #   export NGC_API_KEY=<your key>
 #   export NIM_IMAGE=nvcr.io/nim/meta/llama-3.1-8b-instruct:latest
+#   export NIM_MODEL_NAME=meta/llama-3.1-8b-instruct
 #   docker compose -f docker/compose.yml up
 #
 # The shim builder runs once, compiles libcuda_shim.so, then exits.
@@ -19,11 +20,14 @@ services:
       - shim_lib:/output
     working_dir: /build
     command: >
-      sh -c "make clean && make && cp libcuda_shim.so /output/ &&
-             cp libcuda.so.1 /output/ && cp libcudart.so.12 /output/ &&
-             cp libnvidia-ml.so.1 /output/ && cp libcublas.so.12 /output/ &&
+      sh -c "make clean && make &&
+             cp libcuda_shim.so /output/ &&
+             cp libcuda.so.1 libcuda.so /output/ &&
+             cp libcudart.so.12 libcudart.so /output/ &&
+             cp libnvidia-ml.so.1 libnvidia-ml.so /output/ &&
+             cp libcublas.so.12 libcublasLt.so.12 /output/ &&
              cp libnccl.so.2 /output/ &&
-             echo 'Shim built successfully.'"
+             echo 'Shim built successfully.' && ls -lh /output/"
     restart: "no"
 
   # ── Step 2: CPU inference sidecar ────────────────────────────────────────
@@ -44,6 +48,9 @@ services:
       NCB_FAKE_GPU_NAME:    ${NCB_FAKE_GPU_NAME:-Tesla T4}
       NCB_FAKE_VRAM_MB:     ${NCB_FAKE_VRAM_MB:-16384}
       NCB_LOG_LEVEL:        ${NCB_LOG_LEVEL:-INFO}
+      # Bridge socket must live on the shared shim_lib volume so both
+      # the sidecar and the NIM container (which shares our network
+      # namespace) can reach the same path.
       NCB_BRIDGE_SOCKET:    /opt/nim_cpu_bridge/lib/ncb_bridge.sock
       NIM_MODEL_NAME:       ${NIM_MODEL_NAME:-}
       NIM_CACHE_PATH:       /opt/nim/.cache
